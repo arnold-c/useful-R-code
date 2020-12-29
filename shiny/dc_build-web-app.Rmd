@@ -4,6 +4,8 @@ subtitle: "DataCamp Course"
 output: 
   html_notebook:
     number_sections: TRUE
+    toc: TRUE
+    toc_float: TRUE
 ---
 
 ```{r, include=FALSE}
@@ -34,6 +36,7 @@ shinyApp(ui = ui, server = server)
 
 - To start to add variables the user can input
   - Have to assign inputs to output objects
+    - `inputId` adds a variable to the `input` object (like adding to a dataframe)
   - Need to tell the UI to display object calculated by server
 
 ```{r}
@@ -91,3 +94,198 @@ server <- function(input, output, session) {
 
 # Inputs, Outputs, and Layouts
 
+- Many types of inputs and outputs
+
+## Inputs
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Title"),
+  # Inputs
+  textInput(
+    inputId = "name",
+    label = "Enter a name:"
+  ),
+  selectInput(
+    inputId = "animal",
+    label = "Dog or cat?",
+    choices = c("dogs", "cats")
+  ),
+  sliderInput(
+    inputId = "slider",
+    label = "Pick a slider value",
+    value = 200, # Sets default value
+    min = 150,
+    max = 250
+  ),
+  numericInput(
+    inputId = "numeric",
+    label = "Pick a numeric value",
+    value = 200, # Sets default value
+    min = 150,
+    max = 250,
+    step = 25
+  ),
+  dateInput(
+    inputId = "date",
+    label = "Pick a date",
+    value = Sys.Date(), # Sets default value
+    min = Sys.Date() - 30,
+    max = Sys.Date() + 30,
+    format = "yyyy-mm-dd"
+  ),
+  checkboxGroupInput(
+    inputId = "check",
+    label = "Pick a letter from the choices",
+    choices = c("A", "B", "C")
+  ),
+  
+  # Outputs - selecting the variable from the output df
+  textOutput("name"),
+  textOutput("animal"),
+  textOutput("slider"),
+  textOutput("numeric"),
+  textOutput("date"),
+  textOutput("check")
+)
+
+server <- function(input, output, session) {
+  output$name <- renderText({
+    paste("Do you prefer dogs or cats,", input$name, "?")
+  })
+  
+  output$animal <- renderText({
+    paste("I prefer", input$animal)
+  })
+  
+  output$slider <- renderText({
+    paste("You chose the number", input$slider, "using the slider")
+  })
+  
+  output$numeric <- renderText({
+    paste("You chose the number", input$numeric, "using the number chooser")
+  })
+  
+  output$date <- renderText({
+    paste("You chose the date", input$date, "using the calendar")
+  })
+  
+  output$check <- renderText({
+    paste("You chose the letter", input$check, "using the checkbox")
+  })
+}
+
+shinyApp(ui, server)
+```
+
+## Outputs
+
+```{r}
+library(tidyverse)
+# Use DT package to create HTML widget table that is interactive
+
+ui <- fluidPage(
+  DT::DTOutput("cars_table") 
+)
+
+server <- function(input, output, session){
+  output$cars_table <- DT::renderDT({
+    mtcars %>%
+      count(mpg, cyl)
+  })
+}
+
+shinyApp(ui, server)
+```
+
+- You can use `plotly::renderPlotly()` to make interactive `ggplot2` figures
+
+```{r}
+library(tidyverse)
+# Use Plotly package to create HTML widget plot that is interactive
+
+ui <- fluidPage(
+  plotly::plotlyOutput("cars_table") 
+)
+
+server <- function(input, output, session){
+  output$cars_table <- plotly::renderPlotly({
+    mtcars %>%
+      ggplot(aes(x = mpg, y = disp, color = cyl)) + 
+      geom_point()
+  })
+}
+
+shinyApp(ui, server)
+```
+
+## Layouts
+
+- Can add tab layouts
+
+
+```{r}
+library(tidyverse)
+# Use DT package to create HTML widget table that is interactive
+# Use Plotly package to create HTML widget plot that is interactive
+# Use shinythemes package to be able to select from many themes
+
+ui <- fluidPage(
+  titlePanel("MTCars Exploration"),
+  # shinythemes::themeSelector(), # Allows you to toggle themes *within* the app
+  theme = shinythemes::shinytheme("superhero"), # Select and set a theme
+  sidebarLayout(
+    sidebarPanel(
+      numericInput(
+        inputId = "cyl", 
+        label = "How many cylinders would you like to filter the results to?",
+        min = 4,
+        max = 8,
+        step = 2,
+        value = 6
+      )
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel(
+          "Table",
+          DT::DTOutput("cars_table")
+        ),
+        tabPanel(
+          "Scatter plot",
+          plotly::plotlyOutput("cars_plot") 
+        )
+      )
+    )
+  )
+  
+)
+
+server <- function(input, output, session){
+  output$cars_table <- DT::renderDT({
+    mtcars %>%
+      filter(cyl == input$cyl) %>%
+      count(mpg, disp)
+  })
+  
+  output$cars_plot <- plotly::renderPlotly({
+    mtcars %>%
+      filter(cyl == input$cyl) %>%
+      ggplot(aes(x = mpg, y = disp, color = gear)) + 
+      geom_point()
+  })
+}
+
+shinyApp(ui, server)
+```
+
+## Workflow
+
+1. Add inputs to UI
+2. Add outputs to UI and Server
+    a. Add outputs calls to UI
+    b. Add outputs render functions to Server
+        - Add placeholder functions e.g. empty `ggplot()`
+3. Update layout in UI
+4. Update outputs in Server 
+    - Incorporate user inputs
