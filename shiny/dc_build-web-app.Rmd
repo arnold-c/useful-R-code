@@ -1,0 +1,93 @@
+---
+title: "Building Web Applications with Shiny in R"
+subtitle: "DataCamp Course"
+output: 
+  html_notebook:
+    number_sections: TRUE
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(eval=FALSE)
+```
+
+
+# Getting Started with Shiny
+
+- What is a web app?
+  - Uses a UI and a server
+  
+- Most people use `fluidPage()` to generate the UI
+- Server created by defining custom function
+- Basic structure below
+
+```{r}
+library(shiny)
+
+ui <- fluidPage()
+
+server <- function(input, output, session){
+  
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+- To start to add variables the user can input
+  - Have to assign inputs to output objects
+  - Need to tell the UI to display object calculated by server
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Title"),
+  textInput(
+    inputId = "name",
+    label = "Enter a name:"
+  ),
+  textOutput("q")
+)
+
+server <- function(input, output, session) {
+  output$q <- renderText({
+    paste(
+      "Do you prefer dogs or cats,",
+      input$name,
+      "?"
+    )
+  })
+}
+```
+
+- To change the layout of the UI, need to add sidebar panels and sidebar layout
+- Can use subsets of the dataframe to create plots that change based on the input values
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Title"),
+
+  sidebarLayout(
+    
+    sidebarPanel(
+      textInput(
+        inputId = "name",
+        label = "Enter a name:"
+      )
+    ),
+
+    mainPanel(
+      plotOutput("trend")
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  output$trend <- renderPlot({
+    data_name <- filter(babynames, name == input$name)
+    
+    ggplot(data_name, aes(x = year, y = prop, color = sex)) +
+      geom_line()
+  })
+}
+```
+
+# Inputs, Outputs, and Layouts
+
