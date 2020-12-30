@@ -221,8 +221,7 @@ shinyApp(ui, server)
 
 ## Layouts
 
-- Can add tab layouts
-
+- Can add tab layouts using `tabsetPanel()` and `tabPanel()`
 
 ```{r}
 library(tidyverse)
@@ -289,3 +288,199 @@ shinyApp(ui, server)
 3. Update layout in UI
 4. Update outputs in Server 
     - Incorporate user inputs
+    
+# Reactive Programming
+
+- Reactive sources
+    - User inputs that come through a browser interface (usually)
+    - Can be connect to multiple endpoints e.g. plots and summaries
+    - Can be accessed using `input$x`
+- Reactive endpoints
+    - Something that appears in the browser window e.g. plot
+    - Updates in response to notifications when underlying source values change
+    - Output objects are **reactive observers**
+        - `render__()` functions return a **reactive expression**
+        - assign reactive expression to output value
+        - Shiny automatically create reactive observer
+    - Can be acceessed using `output$x`
+    - Are observers used for their side effects and not for directly calculating anything
+- Reactive conductors
+    - Intermediate that depends on reactive sources and/or updates reactive endpoints
+    - Good for slow and/or expensive calculations
+    - Similar to functions that carry out common code 
+        - `filter_func <- reactive({df %>% filter(input$name)})`
+        - Specify
+    - Different from functions as are:
+        - **lazy** so only evaluated when reactive endpoint calls it
+        - **cached** so only evaluated when one of its underlying sources changes 
+        
+## Observers vs Reactors
+
+```{r, out.width="50%"}
+knitr::include_graphics(here::here("shiny/figs", "reactive-workflow.png"))
+```
+
+- Observers can access reactive sources and reactive expressions
+    - Do not return a value
+    - Used primarily for side effects
+        - e.g. sending data to browser
+
+For example, the code below shows a notification with information input (the 
+reactive source), but only shows a notification, and does not return a value
+
+```{r}
+ui <- fluidPage(
+  textInput("name", "Enter your name:")
+)
+
+server <- function(input, output, session){
+  observe({
+    showNotification(
+      paste("You entered your name,", input$name)
+    )
+  })
+}
+```
+
+- `reactive({})` is for calculating values, without side effects
+    - Return values
+    - Are lazyly evaluated
+    - Must not have side effect
+- `observe({})` is for performing actions, with side effects
+    - Do not return values
+    - Eagerly respond to changes in their dependencies
+    - Primarily useful for their side effects
+    
+Always best practice to encapsulate any computation in a reactive expression.
+    
+## Isolating and Delays
+
+Sometimes we don't want reactive endpoints to be automatically updated, so
+we can wrap the reactive expression in the `isolate({})` function. In the example
+below, the `greeting_type` e.g. Bonjour, Hello etc, will only be updated when
+the user inputs their name.
+
+```{r}
+server <- function(input, output, session){
+  output$greeting <- renderText(
+    paste(
+      isolate({input$greeting_type}), ",", input$name
+    )
+  )
+}
+```
+
+Sometimes we want to delay reactive endpoints to be updated only when an event
+occurs. Instead of using the `isolate({})` function, we instead use 
+`eventReactive({})`. Here, the user must first input their name into the box, and 
+only after they click on the box will the full message appear ("Hello Callum").
+
+```{r}
+server <- function(input, output, session){
+  rv_greeting <- eventReactive(input$show_greeting, {
+    paste("Hello", input$name)
+  })
+  
+  output$greeting <- renderText(
+    rv_greeting
+  )
+}
+```
+
+Similar to delaying the evaluation of a reactive expression using 
+`eventReactive({})`, we can delay observations e.g. notifications, using
+`observeEvent({})`.
+
+```{r}
+server <- function(input, output, session){
+  observeEvent(input$show_greeting, {
+    showModal(paste("Hello", input$name))
+  })
+}
+```
+
+# Build Shiny Apps
+
+When using `selectInput()` with many choices that are already included in the
+dataset, don't have to manually create vector of choices. Instead, can use
+`unique()` function for characters, or `levels()` for a factor variable.
+
+To create custom error messages, you need to use two functions: `validate()` and
+`need()`.
+
+```{r}
+server <- function(input, output, session){
+  output$age <- renderTable({
+    validate(
+      need(input$age != "", "Be sure to select an age")
+    )
+  })
+}
+```
+
+`shinyWidget` is a package that includes the `shinyWidgetsGallery()` function
+that opens a custom app and provides example code and outputs.
+
+```{r}
+shinyWidgets::shinyWidgetsGallery()
+```
+
+If adding a leaflet map to the shiny app, instead of creating the `ui` with
+`fluidPage()`, we can use `bootstrapPage()` which allows the map to be full
+screen.
+
+```{r}
+library(leaflet)
+
+mass_shootings <- read_csv(here::here("shiny/data", "mass-shootings.csv"))
+
+ui <- bootstrapPage(
+  theme = shinythemes::shinytheme("simplex"),
+  leaflet::leafletOutput("map", width = "100%", height = "100%"),
+  # Specify a panel position as map is set to full screen
+  absolutePanel(
+    top = 10, right = 10, id = "controls",
+    sliderInput("nb_fatalities", "Minimum Fatalities", 1, 40, 10),
+    numericRangeInput("year_range", "Select Years", value = c(2010, 2019)),
+    actionButton("show_about", "About")
+  ),
+  # Custom styling of the panel
+  tags$style(
+    text = "text/css",
+    "html, body {width:100%; height:100%}
+    #controls{background-color:white; padding:20px; }"
+    )
+)
+
+server <- function(input, output, session){
+  observeEvent(input$show_about, {
+    showModal(modalDialog("Message", title = "About"))
+  })
+  
+  rval_mass_shooting <- reactive({
+    mass_shootings %>%
+      filter(
+        fatalities >= input$nb_fatalities,
+        year >= input$year_range[1], 
+        year <= input$year_range[2]
+        )
+  })
+  
+  output$map <- leaflet::renderLeaflet({
+    rval_mass_shooting() %>%
+    leaflet() %>%
+      addTiles() %>%
+      setView(-98.56, 39.82, zoom = 5) %>%
+      addCircleMarkers(
+        lng = ~longitude,
+        lat = ~latitude,
+        popup = ~summary,
+        radius = ~fatalities,
+        fill = "red", color = "red", weight = 1
+      )
+  })
+}
+
+shinyApp(ui, server)
+```
+
